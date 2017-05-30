@@ -3,6 +3,9 @@ package com.bow.camptotheca;
 import java.io.Serializable;
 
 /**
+ * BTreeEntry包含左右两个节点，left <= key <= right<br/>
+ * BTreeEntry在BTreeInternalPage中存在，类似于LeafPage中的Tuple(记录)
+ *
  * Each instance of BTreeEntry stores one key and two child page ids. It is used
  * by BTreeInternalPage as an abstraction to iterate through the entries stored inside. 
  * All of the entries or tuples in the left child page should be less than or equal to 

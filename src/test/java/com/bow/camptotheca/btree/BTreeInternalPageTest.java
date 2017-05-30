@@ -32,6 +32,8 @@ import static org.junit.Assert.*;
 //import java.io.File;
 
 public class BTreeInternalPageTest extends SimpleDbTestBase {
+
+    
     private BTreePageId pid;
 
     // these entries have been carefully chosen to be valid entries when
@@ -59,6 +61,7 @@ public class BTreeInternalPageTest extends SimpleDbTestBase {
 		{ 7, 19209, 8 } };
 
     public static final byte[] EXAMPLE_DATA;
+
     static {
         // Build the input table
         ArrayList<BTreeEntry> entries = new ArrayList<BTreeEntry>();
@@ -339,10 +342,4 @@ public class BTreeInternalPageTest extends SimpleDbTestBase {
         }
     }
 
-    /**
-     * JUnit suite target
-     */
-    public static junit.framework.Test suite() {
-        return new JUnit4TestAdapter(BTreeInternalPageTest.class);
-    }
 }

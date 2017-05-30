@@ -239,11 +239,9 @@ public class BTreeFileEncoder {
 
         // next iterate through all the tuples and write out leaf pages
         // and internal pages as they fill up.
-        // We wait until we have two full pages of tuples before writing out the
-        // first page
+        // We wait until we have two full pages of tuples before writing out the  first page
         // so that we will not end up with any pages containing less than
-        // nrecords/2 tuples
-        // (unless it's the only page)
+        // nrecords/2 tuples (unless it's the only page)
         ArrayList<Tuple> page1 = new ArrayList<Tuple>();
         ArrayList<Tuple> page2 = new ArrayList<Tuple>();
         BTreePageId leftSiblingId = null;
@@ -253,6 +251,7 @@ public class BTreeFileEncoder {
             } else if (page2.size() < nrecords) {
                 page2.add(tup);
             } else {
+                // 2页都满了就输出第一页
                 // write out a page of records
                 byte[] leafPageBytes = convertToLeafPage(page1, npagebytes, numFields, typeAr, keyField);
                 BTreePageId leafPid = new BTreePageId(tableid, bf.numPages() + 1, BTreePageId.LEAF);
@@ -442,23 +441,25 @@ public class BTreeFileEncoder {
     }
 
     /**
+     * 叶子节点的父是entry.每层(level)会有多个entry
+     *
      * Recursive function to update the entries by adding a new Entry at a
      * particular level
      * 
      * @param entries - the list of entries
-     * @param bf - the BTreefile
-     * @param e - the new entry
+     * @param bf - the BTreeFile
+     * @param newEntry - the new entry
      * @param level - the level of the new entry (0 is closest to the leaf
      *        pages)
-     * @param nentries - number of entries per page
-     * @param npagebytes - number of bytes per page
+     * @param entryNum - number of entries per page
+     * @param pageBytes - number of bytes per page
      * @param keyType - the type of the key field
-     * @param tableid - the table id of this BTreeFile
+     * @param tableId - the table id of this BTreeFile
      * @param keyField - the index of the key field
      * @throws IOException
      */
-    private static void updateEntries(ArrayList<ArrayList<BTreeEntry>> entries, BTreeFile bf, BTreeEntry e, int level,
-            int nentries, int npagebytes, Type keyType, int tableid, int keyField) throws IOException {
+    private static void updateEntries(ArrayList<ArrayList<BTreeEntry>> entries, BTreeFile bf, BTreeEntry newEntry, int level,
+            int entryNum, int pageBytes, Type keyType, int tableId, int keyField) throws IOException {
         while (entries.size() <= level) {
             entries.add(new ArrayList<BTreeEntry>());
         }
@@ -468,103 +469,108 @@ public class BTreeFileEncoder {
 
         if (size > 0) {
             BTreeEntry prev = entries.get(level).get(size - 1);
-            entries.get(level).set(size - 1, new BTreeEntry(prev.getKey(), prev.getLeftChild(), e.getLeftChild()));
-            if (size == nentries * 2 + 1) {
+            entries.get(level).set(size - 1, new BTreeEntry(prev.getKey(), prev.getLeftChild(), newEntry.getLeftChild()));
+            if (size == entryNum * 2 + 1) {
                 // write out a page of entries
                 ArrayList<BTreeEntry> pageEntries = new ArrayList<BTreeEntry>();
-                pageEntries.addAll(entries.get(level).subList(0, nentries));
-                byte[] internalPageBytes = convertToInternalPage(pageEntries, npagebytes, keyType, childPageCategory);
-                BTreePageId internalPid = new BTreePageId(tableid, bf.numPages() + 1, BTreePageId.INTERNAL);
+                pageEntries.addAll(entries.get(level).subList(0, entryNum));
+                byte[] internalPageBytes = convertToInternalPage(pageEntries, pageBytes, keyType, childPageCategory);
+                BTreePageId internalPid = new BTreePageId(tableId, bf.numPages() + 1, BTreePageId.INTERNAL);
                 bf.writePage(new BTreeInternalPage(internalPid, internalPageBytes, keyField));
 
                 // update the parent by "pushing up" the next key
-                BTreeEntry pushUpEntry = new BTreeEntry(entries.get(level).get(nentries).getKey(), internalPid, null);
-                updateEntries(entries, bf, pushUpEntry, level + 1, nentries, npagebytes, keyType, tableid, keyField);
+                BTreeEntry pushUpEntry = new BTreeEntry(entries.get(level).get(entryNum).getKey(), internalPid, null);
+                updateEntries(entries, bf, pushUpEntry, level + 1, entryNum, pageBytes, keyType, tableId, keyField);
                 ArrayList<BTreeEntry> remainingEntries = new ArrayList<BTreeEntry>();
-                remainingEntries.addAll(entries.get(level).subList(nentries + 1, size));
+                remainingEntries.addAll(entries.get(level).subList(entryNum + 1, size));
                 entries.get(level).clear();
                 entries.get(level).addAll(remainingEntries);
             }
         }
-        entries.get(level).add(e);
+        entries.get(level).add(newEntry);
     }
 
     /**
+     * 先写头,再写tuple,最后用0补齐
+     *
      * Convert a set of tuples to a byte array in the format of a BTreeLeafPage
      * 
-     * @param tuples - the set of tuples
-     * @param npagebytes - number of bytes per page
+     * @param tupleAry - the set of tuple
+     * @param pageBytes - number of bytes per page
      * @param numFields - number of fields in each tuple
-     * @param typeAr - array containing the types of the tuples
-     * @param keyField - the field of the tuples the B+ tree will be keyed on
+     * @param typeAry - array containing the types of the tuples
+     * @param keyField - the field of the tuples the B+ tree will be keyed on 索引字段
      * @return a byte array which can be passed to the BTreeLeafPage constructor
      * @throws IOException
      */
-    public static byte[] convertToLeafPage(ArrayList<Tuple> tuples, int npagebytes, int numFields, Type[] typeAr,
+    public static byte[] convertToLeafPage(ArrayList<Tuple> tupleAry, int pageBytes, int numFields, Type[] typeAry,
             int keyField) throws IOException {
-        int nrecbytes = 0;
+        int recordSize = 0;
         for (int i = 0; i < numFields; i++) {
-            nrecbytes += typeAr[i].getLen();
+            recordSize += typeAry[i].getLen();
         }
-        // pointerbytes: left sibling pointer, right sibling pointer, parent
-        // pointer
-        int pointerbytes = 3 * BTreeLeafPage.INDEX_SIZE;
-        int nrecords = (npagebytes * 8 - pointerbytes * 8) / (nrecbytes * 8 + 1); // floor
-                                                                                  // comes
-                                                                                  // for
-                                                                                  // free
+        // 指针所占空间，左右父3个指针
+        int pointerSize = 3 * BTreeLeafPage.INDEX_SIZE;
+        // 可容纳记录数. 每条记录会有1bit的header表示slot是否被占用
+        int recordNum = (pageBytes * 8 - pointerSize * 8) / (recordSize * 8 + 1);
 
-        // per record, we need one bit; there are nrecords per page, so we need
-        // nrecords bits, i.e., ((nrecords/32)+1) integers.
-        int nheaderbytes = (nrecords / 8);
-        if (nheaderbytes * 8 < nrecords)
-            nheaderbytes++; // ceiling
-        int nheaderbits = nheaderbytes * 8;
+        // 这些记录对应的header的大小
+        int headerBytes = (recordNum / 8);
+        if (headerBytes * 8 < recordNum) {
+            headerBytes++; // ceiling
+        }
+        int headerBits = headerBytes * 8;
 
-        ByteArrayOutputStream baos = new ByteArrayOutputStream(npagebytes);
+        // 输出
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(pageBytes);
         DataOutputStream dos = new DataOutputStream(baos);
 
-        // write out the pointers and the header of the page,
-        // then sort the tuples on the keyField and write out the tuples.
-        //
-        // in the header, write a 1 for bits that correspond to records we've
-        // written and 0 for empty slots.
+        int actualRecordNum = tupleAry.size();
+        if (actualRecordNum > recordNum) {
+            actualRecordNum = recordNum;
+        }
 
-        int recordcount = tuples.size();
-        if (recordcount > nrecords)
-            recordcount = nrecords;
-
+        // 先输出3个引用
         dos.writeInt(0); // parent pointer
         dos.writeInt(0); // left sibling pointer
         dos.writeInt(0); // right sibling pointer
 
         int i = 0;
-        byte headerbyte = 0;
+        byte headerByte = 0;
+        for (i = 0; i < headerBits; i++) {
 
-        for (i = 0; i < nheaderbits; i++) {
-            if (i < recordcount)
-                headerbyte |= (1 << (i % 8));
+            if (i < actualRecordNum) {
+                // 每一条记录都将headerByte对应bit位置置为1
+                headerByte |= (1 << (i % 8));
+            }
 
             if (((i + 1) % 8) == 0) {
-                dos.writeByte(headerbyte);
-                headerbyte = 0;
+                // 够8位后输出
+                dos.writeByte(headerByte);
+                headerByte = 0;
             }
         }
 
-        if (i % 8 > 0)
-            dos.writeByte(headerbyte);
+        // 最后将余下的不够8bit的也输出
+        if (i % 8 > 0) {
+            dos.writeByte(headerByte);
+        }
 
-        Collections.sort(tuples, new TupleComparator(keyField));
-        for (int t = 0; t < recordcount; t++) {
-            TupleDesc td = tuples.get(t).getTupleDesc();
+        // 对tuple进行排序后输出
+        Collections.sort(tupleAry, new TupleComparator(keyField));
+        for (int t = 0; t < actualRecordNum; t++) {
+            TupleDesc td = tupleAry.get(t).getTupleDesc();
             for (int j = 0; j < td.numFields(); j++) {
-                tuples.get(t).getField(j).serialize(dos);
+                tupleAry.get(t).getField(j).serialize(dos);
             }
         }
 
-        // pad the rest of the page with zeroes
-        for (i = 0; i < (npagebytes - (recordcount * nrecbytes + nheaderbytes + pointerbytes)); i++)
+        // 该页空余的部分补0
+        int usedBytes = actualRecordNum * recordSize + headerBytes + pointerSize;
+        int restPageBytes = pageBytes - usedBytes;
+        for (i = 0; i < restPageBytes; i++) {
             dos.writeByte(0);
+        }
 
         return baos.toByteArray();
     }
@@ -614,7 +620,7 @@ public class BTreeFileEncoder {
      * BTreeInternalPage
      * 
      * @param entries - the set of entries
-     * @param npagebytes - number of bytes per page
+     * @param pageBytes - number of bytes per page
      * @param keyType - the type of the key field
      * @param childPageCategory - the category of the child pages (either
      *        internal or leaf)
@@ -622,25 +628,22 @@ public class BTreeFileEncoder {
      *         constructor
      * @throws IOException
      */
-    public static byte[] convertToInternalPage(ArrayList<BTreeEntry> entries, int npagebytes, Type keyType,
+    public static byte[] convertToInternalPage(ArrayList<BTreeEntry> entries, int pageBytes, Type keyType,
             int childPageCategory) throws IOException {
-        int nentrybytes = keyType.getLen() + BTreeInternalPage.INDEX_SIZE;
-        // pointerbytes: one extra child pointer, parent pointer, child page
-        // category
-        int pointerbytes = 2 * BTreeLeafPage.INDEX_SIZE + 1;
-        int nentries = (npagebytes * 8 - pointerbytes * 8 - 1) / (nentrybytes * 8 + 1); // floor
-                                                                                        // comes
-                                                                                        // for
-                                                                                        // free
+        int entryBytes = keyType.getLen() + BTreeInternalPage.INDEX_SIZE;
+        // pointerBytes: one extra child pointer, parent pointer, child page category
+        int pointerBytes = 2 * BTreeLeafPage.INDEX_SIZE + 1;
+        int entryNum = (pageBytes * 8 - pointerBytes * 8 - 1) / (entryBytes * 8 + 1);
 
-        // per entry, we need one bit; there are nentries per page, so we need
-        // nentries bits, plus 1 for the extra child pointer.
-        int nheaderbytes = (nentries + 1) / 8;
-        if (nheaderbytes * 8 < nentries + 1)
-            nheaderbytes++; // ceiling
-        int nheaderbits = nheaderbytes * 8;
 
-        ByteArrayOutputStream baos = new ByteArrayOutputStream(npagebytes);
+        // 计算header的大小
+        int headerBytes = (entryNum + 1) / 8;
+        if (headerBytes * 8 < entryNum + 1){
+            headerBytes++; // ceiling
+        }
+        int headerBits = headerBytes * 8;
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(pageBytes);
         DataOutputStream dos = new DataOutputStream(baos);
 
         // write out the pointers and the header of the page,
@@ -648,54 +651,57 @@ public class BTreeFileEncoder {
         //
         // in the header, write a 1 for bits that correspond to entries we've
         // written and 0 for empty slots.
-        int entrycount = entries.size();
-        if (entrycount > nentries)
-            entrycount = nentries;
+        int actualEntryNum = entries.size();
+        if (actualEntryNum > entryNum){
+            actualEntryNum = entryNum;
+        }
 
         dos.writeInt(0); // parent pointer
         dos.writeByte((byte) childPageCategory);
 
         int i = 0;
-        byte headerbyte = 0;
+        byte headerByte = 0;
 
-        for (i = 0; i < nheaderbits; i++) {
-            if (i < entrycount + 1)
-                headerbyte |= (1 << (i % 8));
+        for (i = 0; i < headerBits; i++) {
+            if (i < actualEntryNum + 1)
+                headerByte |= (1 << (i % 8));
 
             if (((i + 1) % 8) == 0) {
-                dos.writeByte(headerbyte);
-                headerbyte = 0;
+                dos.writeByte(headerByte);
+                headerByte = 0;
             }
         }
 
-        if (i % 8 > 0)
-            dos.writeByte(headerbyte);
+        if (i % 8 > 0){
+            dos.writeByte(headerByte);
+        }
 
         Collections.sort(entries, new EntryComparator());
-        for (int e = 0; e < entrycount; e++) {
+        for (int e = 0; e < actualEntryNum; e++) {
             entries.get(e).getKey().serialize(dos);
         }
 
-        for (int e = entrycount; e < nentries; e++) {
+        for (int e = actualEntryNum; e < entryNum; e++) {
             for (int j = 0; j < keyType.getLen(); j++) {
                 dos.writeByte(0);
             }
         }
 
         dos.writeInt(entries.get(0).getLeftChild().pageNumber());
-        for (int e = 0; e < entrycount; e++) {
+        for (int e = 0; e < actualEntryNum; e++) {
             dos.writeInt(entries.get(e).getRightChild().pageNumber());
         }
 
-        for (int e = entrycount; e < nentries; e++) {
+        for (int e = actualEntryNum; e < entryNum; e++) {
             for (int j = 0; j < BTreeInternalPage.INDEX_SIZE; j++) {
                 dos.writeByte(0);
             }
         }
 
         // pad the rest of the page with zeroes
-        for (i = 0; i < (npagebytes - (nentries * nentrybytes + nheaderbytes + pointerbytes)); i++)
+        for (i = 0; i < (pageBytes - (entryNum * entryBytes + headerBytes + pointerBytes)); i++){
             dos.writeByte(0);
+        }
 
         return baos.toByteArray();
 
