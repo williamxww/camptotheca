@@ -96,7 +96,7 @@ public class BufferPoolWriteTest extends TestUtil.CreateHeapFile {
         // clear the cache
         Database.resetBufferPool(BufferPool.DEFAULT_PAGES);
 
-        // delete 504 tuples from the first page
+        // delete 504 TUPLES from the first page
         for (int i = 0; i < 504; ++i) {
             Tuple t = tuples.get(i);
             Database.getBufferPool().deleteTuple(tid, t);
@@ -105,7 +105,7 @@ public class BufferPoolWriteTest extends TestUtil.CreateHeapFile {
             assertEquals(i + 1, p.getNumEmptySlots());
         }
 
-        // delete 504 tuples from the second page
+        // delete 504 TUPLES from the second page
         for (int i = 0; i < 504; ++i) {
             Tuple t = tuples.get(i + 504);
             Database.getBufferPool().deleteTuple(tid, t);
@@ -121,7 +121,7 @@ public class BufferPoolWriteTest extends TestUtil.CreateHeapFile {
         Database.getCatalog().addTable(hfd, SystemTestUtil.getUUID());
         Database.getBufferPool().insertTuple(tid, hfd.getId(), Utility.getHeapTuple(1, 2));
 
-        // there should now be 10 tuples (on 10 different pages) in the buffer
+        // there should now be 10 TUPLES (on 10 different pages) in the buffer
         // pool
         DbFileIterator it = hfd.iterator(tid);
         it.open();

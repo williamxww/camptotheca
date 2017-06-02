@@ -6,6 +6,27 @@ import java.util.*;
 import static org.junit.Assert.*;
 
 public class TestUtil {
+
+    /**
+     * 将byte以优雅的方式打印
+     * @param bytes bytes
+     */
+    public static void printHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < bytes.length; i++) {
+            String hex = Integer.toHexString(bytes[i] & 0xFF);
+            if (hex.length() == 1) {
+                hex = '0' + hex;
+            }
+            sb.append(hex).append(" ");
+            if ((i + 1) % 16 == 0) {
+                sb.append("\n");
+            }
+        }
+        System.out.print(sb);
+    }
+
+
     /**
      * @return an IntField with value n
      */
@@ -14,7 +35,7 @@ public class TestUtil {
     }
 
     /**
-     * @return a DbIterator over a list of tuples constructed over the data
+     * @return a DbIterator over a list of TUPLES constructed over the data
      *         provided in the constructor. This iterator is already open.
      * @param width the number of fields in each tuple
      * @param tupdata an array such that the ith element the jth tuple lives in
@@ -38,11 +59,11 @@ public class TestUtil {
     }
 
     /**
-     * @return a DbIterator over a list of tuples constructed over the data
+     * @return a DbIterator over a list of TUPLES constructed over the data
      *         provided in the constructor. This iterator is already open.
      * @param width the number of fields in each tuple
      * @param tupdata an array such that the ith element the jth tuple lives in
-     *        slot j * width + i. Objects can be strings or ints; tuples must
+     *        slot j * width + i. Objects can be strings or ints; TUPLES must
      *        all be of same type.
      * @require tupdata.length % width == 0
      * @throws DbException if we encounter an error creating the TupleIterator
@@ -83,7 +104,7 @@ public class TestUtil {
     }
 
     /**
-     * @return true iff the tuples have the same number of fields and
+     * @return true iff the TUPLES have the same number of fields and
      *         corresponding fields in the two Tuples are all equal.
      */
     public static boolean compareTuples(Tuple t1, Tuple t2) {
@@ -101,7 +122,7 @@ public class TestUtil {
     }
 
     /**
-     * Check to see if the DbIterators have the same number of tuples and each
+     * Check to see if the DbIterators have the same number of TUPLES and each
      * tuple pair in parallel iteration satisfies compareTuples . If not, throw
      * an assertion.
      */
@@ -127,7 +148,7 @@ public class TestUtil {
     public static void matchAllTuples(DbIterator expected, DbIterator actual)
             throws DbException, TransactionAbortedException {
         // TODO(ghuo): this n^2 set comparison is kind of dumb, but we haven't
-        // implemented hashCode or equals for tuples.
+        // implemented hashCode or equals for TUPLES.
         boolean matched = false;
         while (expected.hasNext()) {
             Tuple expectedTup = expected.next();
@@ -247,7 +268,7 @@ public class TestUtil {
         private int cur, low, high, width;
 
         /**
-         * Creates a fake SeqScan that returns tuples sequentially with 'width'
+         * Creates a fake SeqScan that returns TUPLES sequentially with 'width'
          * fields, each with the same value, that increases from low (inclusive)
          * and high (exclusive) over getNext calls.
          */

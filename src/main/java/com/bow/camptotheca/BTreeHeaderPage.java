@@ -6,6 +6,7 @@ import java.io.*;
  * Each instance of BTreeHeaderPage stores data for one page of a BTreeFile and
  * implements the Page interface that is used by BufferPool.
  *
+ *
  * @see BTreeFile
  * @see BufferPool
  *
@@ -21,6 +22,9 @@ public class BTreeHeaderPage implements Page {
 
     final BTreePageId pid;
 
+    /**
+     * BTreeHeaderPage中除了会有前后页两个指针占8个字节外，其他字节(header[])都用于存内容,这里每个bit都是一个slot
+     */
     final byte header[];
 
     final int numSlots;
@@ -74,6 +78,7 @@ public class BTreeHeaderPage implements Page {
 
     /**
      * Initially mark all slots in the header used.
+     * 1表示已用
      */
     public void init() {
         for (int i = 0; i < header.length; i++)
@@ -99,6 +104,7 @@ public class BTreeHeaderPage implements Page {
     /**
      * Return a view of this page before it was modified -- used by recovery
      */
+    @Override
     public BTreeHeaderPage getBeforeImage() {
         try {
             byte[] oldDataRef = null;
@@ -114,6 +120,7 @@ public class BTreeHeaderPage implements Page {
         return null;
     }
 
+    @Override
     public void setBeforeImage() {
         synchronized (oldDataLock) {
             oldData = getPageData().clone();
@@ -123,6 +130,7 @@ public class BTreeHeaderPage implements Page {
     /**
      * @return the PageId associated with this page.
      */
+    @Override
     public BTreePageId getId() {
         return pid;
     }
@@ -138,6 +146,7 @@ public class BTreeHeaderPage implements Page {
      * @see #BTreeHeaderPage
      * @return A byte array correspond to the bytes of this page.
      */
+    @Override
     public byte[] getPageData() {
         int len = BufferPool.getPageSize();
         ByteArrayOutputStream baos = new ByteArrayOutputStream(len);
@@ -257,6 +266,7 @@ public class BTreeHeaderPage implements Page {
      * Marks this page as dirty/not dirty and record that transaction that did
      * the dirtying
      */
+    @Override
     public void markDirty(boolean dirty, TransactionId tid) {
         this.dirty = dirty;
         if (dirty)
@@ -267,6 +277,7 @@ public class BTreeHeaderPage implements Page {
      * Returns the tid of the transaction that last dirtied this page, or null
      * if the page is not dirty
      */
+    @Override
     public TransactionId isDirty() {
         if (this.dirty)
             return this.dirtier;
@@ -287,14 +298,15 @@ public class BTreeHeaderPage implements Page {
      * Abstraction to mark a page of the BTreeFile used or unused
      */
     public void markSlotUsed(int i, boolean value) {
-        int headerbit = i % 8;
-        int headerbyte = (i - headerbit) / 8;
+        int headerBit = i % 8;
+        int headerByte = (i - headerBit) / 8;
 
         Debug.log(1, "BTreeHeaderPage.setSlot: setting slot %d to %b", i, value);
-        if (value)
-            header[headerbyte] |= 1 << headerbit;
-        else
-            header[headerbyte] &= (0xFF ^ (1 << headerbit));
+        if (value){
+            header[headerByte] |= 1 << headerBit;
+        } else{
+            header[headerByte] &= (0xFF ^ (1 << headerBit));
+        }
     }
 
     /**

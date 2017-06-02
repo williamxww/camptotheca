@@ -3,7 +3,6 @@ package com.bow.camptotheca.btree;
 import com.bow.camptotheca.BTreeEntry;
 import com.bow.camptotheca.BTreeFileEncoder;
 import com.bow.camptotheca.BTreeInternalPage;
-import com.bow.camptotheca.BTreeLeafPage;
 import com.bow.camptotheca.BTreePageId;
 import com.bow.camptotheca.BTreeUtility;
 import com.bow.camptotheca.BufferPool;
@@ -14,10 +13,8 @@ import com.bow.camptotheca.SimpleDbTestBase;
 import com.bow.camptotheca.SystemTestUtil;
 import com.bow.camptotheca.TestUtil;
 import com.bow.camptotheca.TransactionId;
-import com.bow.camptotheca.Tuple;
 import com.bow.camptotheca.Type;
 import com.bow.camptotheca.Utility;
-import junit.framework.JUnit4TestAdapter;
 import org.junit.Before;
 import org.junit.Test;
 

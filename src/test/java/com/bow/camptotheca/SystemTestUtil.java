@@ -63,7 +63,7 @@ public class SystemTestUtil {
 
         Random r = new Random();
 
-        // Fill the tuples list with generated values
+        // Fill the TUPLES list with generated values
         for (int i = 0; i < rows; ++i) {
             ArrayList<Integer> tuple = new ArrayList<Integer>(columns);
             for (int j = 0; j < columns; ++j) {
@@ -79,7 +79,7 @@ public class SystemTestUtil {
             tuples.add(tuple);
         }
 
-        // Convert the tuples list to a heap file and open it
+        // Convert the TUPLES list to a heap file and open it
         File temp = File.createTempFile("table", ".dat");
         temp.deleteOnExit();
         HeapFileEncoder.convert(tuples, temp, BufferPool.getPageSize(), columns);
@@ -113,7 +113,7 @@ public class SystemTestUtil {
         ArrayList<ArrayList<Integer>> copy = new ArrayList<ArrayList<Integer>>(tuples);
 
         if (Debug.isEnabled()) {
-            Debug.log("Expected tuples:");
+            Debug.log("Expected TUPLES:");
             for (ArrayList<Integer> t : copy) {
                 Debug.log("\t" + Utility.listToString(t));
             }
@@ -126,18 +126,18 @@ public class SystemTestUtil {
             boolean isExpected = copy.remove(list);
             Debug.log("scanned tuple: %s (%s)", t, isExpected ? "expected" : "not expected");
             if (!isExpected) {
-                Assert.fail("expected tuples does not contain: " + t);
+                Assert.fail("expected TUPLES does not contain: " + t);
             }
         }
         iterator.close();
 
         if (!copy.isEmpty()) {
-            String msg = "expected to find the following tuples:\n";
+            String msg = "expected to find the following TUPLES:\n";
             final int MAX_TUPLES_OUTPUT = 10;
             int count = 0;
             for (ArrayList<Integer> t : copy) {
                 if (count == MAX_TUPLES_OUTPUT) {
-                    msg += "[" + (copy.size() - MAX_TUPLES_OUTPUT) + " more tuples]";
+                    msg += "[" + (copy.size() - MAX_TUPLES_OUTPUT) + " more TUPLES]";
                     break;
                 }
                 msg += "\t" + Utility.listToString(t) + "\n";

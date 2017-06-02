@@ -8,7 +8,6 @@ import com.bow.camptotheca.BTreeInternalPage;
 import com.bow.camptotheca.BTreeLeafPage;
 import com.bow.camptotheca.BTreePageId;
 import com.bow.camptotheca.BTreeRootPtrPage;
-import com.bow.camptotheca.BTreeUtility;
 import com.bow.camptotheca.BufferPool;
 import com.bow.camptotheca.Database;
 import com.bow.camptotheca.DbFileIterator;
@@ -20,12 +19,10 @@ import com.bow.camptotheca.TransactionId;
 import com.bow.camptotheca.Tuple;
 import com.bow.camptotheca.TupleDesc;
 import com.bow.camptotheca.Type;
-import com.bow.camptotheca.Utility;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.UUID;
@@ -89,50 +86,49 @@ public class BTreeFileDemoTest {
 
         // 从heapFile中读取所有记录(Tuple)并对其排序
         TransactionId tid = new TransactionId();
-        ArrayList<Tuple> tuples = new ArrayList();
+        ArrayList<Tuple> tupleList = new ArrayList();
         DbFileIterator it = Database.getCatalog().getDatabaseFile(heapFile.getId()).iterator(tid);
         it.open();
         while (it.hasNext()) {
             Tuple tup = it.next();
-            tuples.add(tup);
+            tupleList.add(tup);
         }
         it.close();
-        Collections.sort(tuples, new BTreeFileEncoder.TupleComparator(keyField));
+        Collections.sort(tupleList, new BTreeFileEncoder.TupleComparator(keyField));
 
 
-        // 将排序过的tuple加入到b+树中
+        // 构造BTreeFile
         BTreeFile bTreeFile = new BTreeFile(indexFile, keyField, tupleDesc);
         Database.getCatalog().addTable(bTreeFile, UUID.randomUUID().toString());
 
-
-
         int pageSize = BufferPool.getPageSize();
         int tableId = bTreeFile.getId();
+
+
+        //构造叶子
+        BTreePageId leftLeafPageId = new BTreePageId(tableId, 2, BTreePageId.LEAF);
+        // 将tuple转换为字节
+        byte[] leafPageBytes = BTreeFileEncoder.convertToLeafPage(tupleList, pageSize, types.length, types, keyField);
+        BTreeLeafPage leftLeafPage = new BTreeLeafPage(leftLeafPageId, leafPageBytes, keyField);
+
+        // 构造内部索引节点
+        BTreePageId internalPageId = new BTreePageId(tableId, 1, BTreePageId.INTERNAL);
+        ArrayList<BTreeEntry> entryList = new ArrayList<BTreeEntry>();
+
+        BTreeEntry entry = new BTreeEntry(new IntField(10), leftLeafPageId, null);
+        entryList.add(entry);
+        byte[] internalPageBytes = BTreeFileEncoder.convertToInternalPage(entryList,pageSize, Type.INT_TYPE,
+                BTreePageId.LEAF);
+        BTreeInternalPage parent = new BTreeInternalPage(internalPageId, internalPageBytes, keyField);
+        leftLeafPage.setParentId(internalPageId);
+
 
         //构造根
         BTreePageId rootPageId = new BTreePageId(tableId, 0, BTreePageId.ROOT_PTR);
         BTreeRootPtrPage rootPtrPage = new BTreeRootPtrPage(rootPageId, BTreeRootPtrPage.createEmptyPageData());
 
-        //构造一个叶子
-        BTreePageId leftPageId = new BTreePageId(tableId, 2, BTreePageId.LEAF);
-        // 将tuple转换为字节
-        byte[] leafPageBytes = BTreeFileEncoder.convertToLeafPage(tuples, pageSize, types.length, types, keyField);
-        BTreeLeafPage leftPage = new BTreeLeafPage(leftPageId, leafPageBytes, keyField);
-
-        // 构造父节点
-        BTreePageId parentId = new BTreePageId(tableId, 1, BTreePageId.INTERNAL);
-        ArrayList<BTreeEntry> entries = new ArrayList<BTreeEntry>();
-
-        //entry 的key为左page中最大的记录的key吗？
-        BTreeEntry entry = new BTreeEntry(new IntField(10), leftPageId, null);
-        entries.add(entry);
-        byte[] internalPageBytes = BTreeFileEncoder.convertToInternalPage(entries,pageSize, Type.INT_TYPE,
-                BTreePageId.LEAF);
-        BTreeInternalPage parent = new BTreeInternalPage(parentId, internalPageBytes, keyField);
-        leftPage.setParentId(parentId);
-
         bTreeFile.writePage(rootPtrPage);
-        bTreeFile.writePage(leftPage);
+        bTreeFile.writePage(leftLeafPage);
 
     }
 }
