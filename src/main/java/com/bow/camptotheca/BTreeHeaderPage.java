@@ -1,18 +1,23 @@
 package com.bow.camptotheca;
 
-import java.io.*;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 
 /**
  * Each instance of BTreeHeaderPage stores data for one page of a BTreeFile and
  * implements the Page interface that is used by BufferPool.
  *
+ * 序列化结果： nextPageId, prevPageId, header[]
  *
  * @see BTreeFile
  * @see BufferPool
  *
  */
 public class BTreeHeaderPage implements Page {
-
 
     private volatile boolean dirty = false;
 
@@ -77,8 +82,7 @@ public class BTreeHeaderPage implements Page {
     }
 
     /**
-     * Initially mark all slots in the header used.
-     * 1表示已用
+     * Initially mark all slots in the header used. 1表示已用
      */
     public void init() {
         for (int i = 0; i < header.length; i++)
@@ -302,9 +306,9 @@ public class BTreeHeaderPage implements Page {
         int headerByte = (i - headerBit) / 8;
 
         Debug.log(1, "BTreeHeaderPage.setSlot: setting slot %d to %b", i, value);
-        if (value){
+        if (value) {
             header[headerByte] |= 1 << headerBit;
-        } else{
+        } else {
             header[headerByte] &= (0xFF ^ (1 << headerBit));
         }
     }

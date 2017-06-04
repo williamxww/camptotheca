@@ -185,9 +185,9 @@ public class BTreeFileEncoder {
      * @param hFile - the data file for the HeapFile to be used as an
      *        intermediate conversion step
      * @param bFile - the data file for the BTreeFile
-     * @param npagebytes - number of bytes per page
+     * @param pageSize - number of bytes per page
      * @param numFields - number of fields per tuple
-     * @param typeAr - array containing the types of the tuples
+     * @param typeAry - array containing the types of the tuples
      * @param fieldSeparator - character separating fields in the raw data file
      * @param keyField - the field of the tuples the B+ tree will be keyed on
      * @return the B+ tree file
@@ -195,7 +195,7 @@ public class BTreeFileEncoder {
      * @throws DbException
      * @throws TransactionAbortedException
      */
-    public static BTreeFile convert(File inFile, File hFile, File bFile, int npagebytes, int numFields, Type[] typeAr,
+    public static BTreeFile convert(File inFile, File hFile, File bFile, int pageSize, int numFields, Type[] typeAry,
             char fieldSeparator, int keyField) throws IOException, DbException, TransactionAbortedException {
         // convert the inFile to HeapFile first.
         HeapFileEncoder.convert(inFile, hFile, BufferPool.getPageSize(), numFields);
@@ -214,55 +214,58 @@ public class BTreeFileEncoder {
         Collections.sort(tuples, new TupleComparator(keyField));
 
         // add the tuples to B+ tree file
-        BTreeFile bf = BTreeUtility.openBTreeFile(numFields, bFile, keyField);
-        Type keyType = typeAr[keyField];
-        int tableid = bf.getId();
+        BTreeFile bTreeFile = BTreeUtility.openBTreeFile(numFields, bFile, keyField);
+        Type keyType = typeAry[keyField];
+        int tableId = bTreeFile.getId();
 
-        int nrecbytes = 0;
+        // 一条记录的大小
+        int recordBytes = 0;
         for (int i = 0; i < numFields; i++) {
-            nrecbytes += typeAr[i].getLen();
+            recordBytes += typeAry[i].getLen();
         }
-        // pointerbytes: left sibling pointer, right sibling pointer, parent pointer
-        int leafpointerbytes = 3 * BTreeLeafPage.INDEX_SIZE;
-        int nrecords = (npagebytes * 8 - leafpointerbytes * 8) / (nrecbytes * 8 + 1); // floor comes for free
 
-        int nentrybytes = keyType.getLen() + BTreeInternalPage.INDEX_SIZE;
-        // pointerbytes: one extra child pointer, parent pointer, child page category
+        //叶子节点有3个指针，左右兄弟和父亲
+        int leafPointerBytes = 3 * BTreeLeafPage.INDEX_SIZE;
+        // 注意每条记录还会有一个bit记录slot的使用状态
+        int maxRecordNum = (pageSize * 8 - leafPointerBytes * 8) / (recordBytes * 8 + 1);
 
-        int internalpointerbytes = 2 * BTreeLeafPage.INDEX_SIZE + 1;
-        int nentries = (npagebytes * 8 - internalpointerbytes * 8 - 1) / (nentrybytes * 8 + 1); // floor comes for free
+        // 每个entry的大小
+        int entryBytes = keyType.getLen() + BTreeInternalPage.INDEX_SIZE;
+        //除了一批entry外，索引页有一个父指针，额外多出的一个子节点指针，
+        int internalPointerBytes = 2 * BTreeLeafPage.INDEX_SIZE + 1;
+        int maxEntryNum = (pageSize * 8 - internalPointerBytes * 8 - 1) / (entryBytes * 8 + 1);
 
-        ArrayList<ArrayList<BTreeEntry>> entries = new ArrayList<ArrayList<BTreeEntry>>();
+        ArrayList<ArrayList<BTreeEntry>> levelEntryList = new ArrayList<ArrayList<BTreeEntry>>();
 
-        // first add some bytes for the root pointer page
-        bf.writePage(new BTreeRootPtrPage(BTreeRootPtrPage.getId(tableid), BTreeRootPtrPage.createEmptyPageData()));
+        // 创建空白的root指针页
+        bTreeFile.writePage(new BTreeRootPtrPage(BTreeRootPtrPage.getId(tableId), BTreeRootPtrPage.createEmptyPageData()));
 
         // next iterate through all the tuples and write out leaf pages
         // and internal pages as they fill up.
-        // We wait until we have two full pages of tuples before writing out the  first page
+        // We wait until we have two full pages of tuples before writing out the
+        // first page
         // so that we will not end up with any pages containing less than
         // nrecords/2 tuples (unless it's the only page)
         ArrayList<Tuple> page1 = new ArrayList<Tuple>();
         ArrayList<Tuple> page2 = new ArrayList<Tuple>();
         BTreePageId leftSiblingId = null;
         for (Tuple tup : tuples) {
-            if (page1.size() < nrecords) {
+            if (page1.size() < maxRecordNum) {
                 page1.add(tup);
-            } else if (page2.size() < nrecords) {
+            } else if (page2.size() < maxRecordNum) {
                 page2.add(tup);
             } else {
-                // 2页都满了就输出第一页
-                // write out a page of records
-                byte[] leafPageBytes = convertToLeafPage(page1, npagebytes, numFields, typeAr, keyField);
-                BTreePageId leafPid = new BTreePageId(tableid, bf.numPages() + 1, BTreePageId.LEAF);
-                BTreeLeafPage leafPage = new BTreeLeafPage(leafPid, leafPageBytes, keyField);
+                // 2页都满了就输出第一页到文件中
+                byte[] leafPageBytes = convertToLeafPage(page1, pageSize, numFields, typeAry, keyField);
+                BTreePageId pageId = new BTreePageId(tableId, bTreeFile.numPages() + 1, BTreePageId.LEAF);
+                BTreeLeafPage leafPage = new BTreeLeafPage(pageId, leafPageBytes, keyField);
                 leafPage.setLeftSiblingId(leftSiblingId);
-                bf.writePage(leafPage);
-                leftSiblingId = leafPid;
+                bTreeFile.writePage(leafPage);
+                leftSiblingId = pageId;
 
                 // update the parent by "copying up" the next key
-                BTreeEntry copyUpEntry = new BTreeEntry(page2.get(0).getField(keyField), leafPid, null);
-                updateEntries(entries, bf, copyUpEntry, 0, nentries, npagebytes, keyType, tableid, keyField);
+                BTreeEntry copyUpEntry = new BTreeEntry(page2.get(0).getField(keyField), pageId, null);
+                updateEntries(levelEntryList, bTreeFile, copyUpEntry, 0, maxEntryNum, pageSize, keyType, tableId, keyField);
 
                 page1 = page2;
                 page2 = new ArrayList<Tuple>();
@@ -282,11 +285,11 @@ public class BTreeFileEncoder {
         BTreePageId lastPid = null;
         if (page2.size() == 0) {
             // write out a page of records - this is the root page
-            byte[] lastPageBytes = convertToLeafPage(page1, npagebytes, numFields, typeAr, keyField);
-            lastPid = new BTreePageId(tableid, bf.numPages() + 1, BTreePageId.LEAF);
+            byte[] lastPageBytes = convertToLeafPage(page1, pageSize, numFields, typeAry, keyField);
+            lastPid = new BTreePageId(tableId, bTreeFile.numPages() + 1, BTreePageId.LEAF);
             BTreeLeafPage lastPage = new BTreeLeafPage(lastPid, lastPageBytes, keyField);
             lastPage.setLeftSiblingId(leftSiblingId);
-            bf.writePage(lastPage);
+            bTreeFile.writePage(lastPage);
         } else {
             // split the remaining tuples in half
             int remainingTuples = page1.size() + page2.size();
@@ -297,38 +300,38 @@ public class BTreeFileEncoder {
             lastPg.addAll(page2);
 
             // write out the last two pages of records
-            byte[] secondToLastPageBytes = convertToLeafPage(secondToLastPg, npagebytes, numFields, typeAr, keyField);
-            BTreePageId secondToLastPid = new BTreePageId(tableid, bf.numPages() + 1, BTreePageId.LEAF);
+            byte[] secondToLastPageBytes = convertToLeafPage(secondToLastPg, pageSize, numFields, typeAry, keyField);
+            BTreePageId secondToLastPid = new BTreePageId(tableId, bTreeFile.numPages() + 1, BTreePageId.LEAF);
             BTreeLeafPage secondToLastPage = new BTreeLeafPage(secondToLastPid, secondToLastPageBytes, keyField);
             secondToLastPage.setLeftSiblingId(leftSiblingId);
-            bf.writePage(secondToLastPage);
+            bTreeFile.writePage(secondToLastPage);
 
-            byte[] lastPageBytes = convertToLeafPage(lastPg, npagebytes, numFields, typeAr, keyField);
-            lastPid = new BTreePageId(tableid, bf.numPages() + 1, BTreePageId.LEAF);
+            byte[] lastPageBytes = convertToLeafPage(lastPg, pageSize, numFields, typeAry, keyField);
+            lastPid = new BTreePageId(tableId, bTreeFile.numPages() + 1, BTreePageId.LEAF);
             BTreeLeafPage lastPage = new BTreeLeafPage(lastPid, lastPageBytes, keyField);
             lastPage.setLeftSiblingId(secondToLastPid);
-            bf.writePage(lastPage);
+            bTreeFile.writePage(lastPage);
 
             // update the parent by "copying up" the next key
             BTreeEntry copyUpEntry = new BTreeEntry(lastPg.get(0).getField(keyField), secondToLastPid, lastPid);
-            updateEntries(entries, bf, copyUpEntry, 0, nentries, npagebytes, keyType, tableid, keyField);
+            updateEntries(levelEntryList, bTreeFile, copyUpEntry, 0, maxEntryNum, pageSize, keyType, tableId, keyField);
         }
 
         // Write out the remaining internal pages
-        cleanUpEntries(entries, bf, nentries, npagebytes, keyType, tableid, keyField);
+        cleanUpEntries(levelEntryList, bTreeFile, maxEntryNum, pageSize, keyType, tableId, keyField);
 
         // update the root pointer to point to the last page of the file
-        int root = bf.numPages();
+        int root = bTreeFile.numPages();
         int rootCategory = (root > 1 ? BTreePageId.INTERNAL : BTreePageId.LEAF);
         byte[] rootPtrBytes = convertToRootPtrPage(root, rootCategory, 0);
-        bf.writePage(new BTreeRootPtrPage(BTreeRootPtrPage.getId(tableid), rootPtrBytes));
+        bTreeFile.writePage(new BTreeRootPtrPage(BTreeRootPtrPage.getId(tableId), rootPtrBytes));
 
         // set all the parent and sibling pointers
-        setParents(bf, new BTreePageId(tableid, root, rootCategory), BTreeRootPtrPage.getId(tableid));
-        setRightSiblingPtrs(bf, lastPid, null);
+        setParents(bTreeFile, new BTreePageId(tableId, root, rootCategory), BTreeRootPtrPage.getId(tableId));
+        setRightSiblingPtrs(bTreeFile, lastPid, null);
 
         Database.resetBufferPool(BufferPool.DEFAULT_PAGES);
-        return bf;
+        return bTreeFile;
     }
 
     /**
@@ -446,48 +449,52 @@ public class BTreeFileEncoder {
      * Recursive function to update the entries by adding a new Entry at a
      * particular level
      * 
-     * @param entries - the list of entries
+     * @param levelEntryList - the list of entries,整个文件里所有页包含的entry，第n个list表示第n层的所有entry
      * @param bf - the BTreeFile
      * @param newEntry - the new entry
      * @param level - the level of the new entry (0 is closest to the leaf
      *        pages)
-     * @param entryNum - number of entries per page
-     * @param pageBytes - number of bytes per page
+     * @param maxEntryNumPerPage - number of entries per page
+     * @param pageSize - number of bytes per page
      * @param keyType - the type of the key field
      * @param tableId - the table id of this BTreeFile
      * @param keyField - the index of the key field
      * @throws IOException
      */
-    private static void updateEntries(ArrayList<ArrayList<BTreeEntry>> entries, BTreeFile bf, BTreeEntry newEntry, int level,
-            int entryNum, int pageBytes, Type keyType, int tableId, int keyField) throws IOException {
-        while (entries.size() <= level) {
-            entries.add(new ArrayList<BTreeEntry>());
+    private static void updateEntries(ArrayList<ArrayList<BTreeEntry>> levelEntryList, BTreeFile bf, BTreeEntry newEntry,
+            int level, int maxEntryNumPerPage, int pageSize, Type keyType, int tableId, int keyField) throws IOException {
+        while (levelEntryList.size() <= level) {
+            levelEntryList.add(new ArrayList<BTreeEntry>());
         }
 
         int childPageCategory = (level == 0 ? BTreePageId.LEAF : BTreePageId.INTERNAL);
-        int size = entries.get(level).size();
-
+        //每个level上可能有多个page(1个page又包含多个entry)
+        int size = levelEntryList.get(level).size();
         if (size > 0) {
-            BTreeEntry prev = entries.get(level).get(size - 1);
-            entries.get(level).set(size - 1, new BTreeEntry(prev.getKey(), prev.getLeftChild(), newEntry.getLeftChild()));
-            if (size == entryNum * 2 + 1) {
-                // write out a page of entries
+            //将newEntry跟在此前最后一个entry后面,  pointer-prevEntry-pointer-newEntry
+            BTreeEntry prev = levelEntryList.get(level).get(size - 1);
+            levelEntryList.get(level).set(size - 1,
+                    new BTreeEntry(prev.getKey(), prev.getLeftChild(), newEntry.getLeftChild()));
+            // 此level上的entry总数超过2页
+            if (size == maxEntryNumPerPage * 2 + 1) {
+                // 输出一页entry
                 ArrayList<BTreeEntry> pageEntries = new ArrayList<BTreeEntry>();
-                pageEntries.addAll(entries.get(level).subList(0, entryNum));
-                byte[] internalPageBytes = convertToInternalPage(pageEntries, pageBytes, keyType, childPageCategory);
+                pageEntries.addAll(levelEntryList.get(level).subList(0, maxEntryNumPerPage));
+                byte[] internalPageBytes = convertToInternalPage(pageEntries, pageSize, keyType, childPageCategory);
                 BTreePageId internalPid = new BTreePageId(tableId, bf.numPages() + 1, BTreePageId.INTERNAL);
                 bf.writePage(new BTreeInternalPage(internalPid, internalPageBytes, keyField));
 
                 // update the parent by "pushing up" the next key
-                BTreeEntry pushUpEntry = new BTreeEntry(entries.get(level).get(entryNum).getKey(), internalPid, null);
-                updateEntries(entries, bf, pushUpEntry, level + 1, entryNum, pageBytes, keyType, tableId, keyField);
+                // 获取下一页的第一个entry(序号为maxEntryNum)的key作为新entry更新上一层
+                BTreeEntry pushUpEntry = new BTreeEntry(levelEntryList.get(level).get(maxEntryNumPerPage).getKey(), internalPid, null);
+                updateEntries(levelEntryList, bf, pushUpEntry, level + 1, maxEntryNumPerPage, pageSize, keyType, tableId, keyField);
                 ArrayList<BTreeEntry> remainingEntries = new ArrayList<BTreeEntry>();
-                remainingEntries.addAll(entries.get(level).subList(entryNum + 1, size));
-                entries.get(level).clear();
-                entries.get(level).addAll(remainingEntries);
+                remainingEntries.addAll(levelEntryList.get(level).subList(maxEntryNumPerPage + 1, size));
+                levelEntryList.get(level).clear();
+                levelEntryList.get(level).addAll(remainingEntries);
             }
         }
-        entries.get(level).add(newEntry);
+        levelEntryList.get(level).add(newEntry);
     }
 
     /**
@@ -499,7 +506,8 @@ public class BTreeFileEncoder {
      * @param pageBytes - number of bytes per page
      * @param numFields - number of fields in each tuple
      * @param typeAry - array containing the types of the tuples
-     * @param keyField - the field of the tuples the B+ tree will be keyed on 索引字段
+     * @param keyField - the field of the tuples the B+ tree will be keyed on
+     *        索引字段
      * @return a byte array which can be passed to the BTreeLeafPage constructor
      * @throws IOException
      */
@@ -631,14 +639,14 @@ public class BTreeFileEncoder {
     public static byte[] convertToInternalPage(ArrayList<BTreeEntry> entries, int pageBytes, Type keyType,
             int childPageCategory) throws IOException {
         int entryBytes = keyType.getLen() + BTreeInternalPage.INDEX_SIZE;
-        // pointerBytes: one extra child pointer, parent pointer, child page category
+        // pointerBytes: one extra child pointer, parent pointer, child page
+        // category
         int pointerBytes = 2 * BTreeLeafPage.INDEX_SIZE + 1;
         int entryNum = (pageBytes * 8 - pointerBytes * 8 - 1) / (entryBytes * 8 + 1);
 
-
         // 计算header的大小
         int headerBytes = (entryNum + 1) / 8;
-        if (headerBytes * 8 < entryNum + 1){
+        if (headerBytes * 8 < entryNum + 1) {
             headerBytes++; // ceiling
         }
         int headerBits = headerBytes * 8;
@@ -652,7 +660,7 @@ public class BTreeFileEncoder {
         // in the header, write a 1 for bits that correspond to entries we've
         // written and 0 for empty slots.
         int actualEntryNum = entries.size();
-        if (actualEntryNum > entryNum){
+        if (actualEntryNum > entryNum) {
             actualEntryNum = entryNum;
         }
 
@@ -672,7 +680,7 @@ public class BTreeFileEncoder {
             }
         }
 
-        if (i % 8 > 0){
+        if (i % 8 > 0) {
             dos.writeByte(headerByte);
         }
 
@@ -699,7 +707,7 @@ public class BTreeFileEncoder {
         }
 
         // pad the rest of the page with zeroes
-        for (i = 0; i < (pageBytes - (entryNum * entryBytes + headerBytes + pointerBytes)); i++){
+        for (i = 0; i < (pageBytes - (entryNum * entryBytes + headerBytes + pointerBytes)); i++) {
             dos.writeByte(0);
         }
 

@@ -4,9 +4,7 @@ import java.util.*;
 import java.io.*;
 
 /**
- * Each instance of BTreeLeafPage stores data for one page of a BTreeFile and
- * implements the Page interface that is used by BufferPool.
- *
+ * 实际存放行记录的地方
  * 序列化顺序<br/>
  * 父指针，左兄弟节点，右兄弟节点，header[]，tuples[]
  *

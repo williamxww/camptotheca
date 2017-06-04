@@ -12,8 +12,10 @@ public class TestUtil {
      * @param bytes bytes
      */
     public static void printHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder("001  ");
+        int lineNum = 1;
         for (int i = 0; i < bytes.length; i++) {
+
             String hex = Integer.toHexString(bytes[i] & 0xFF);
             if (hex.length() == 1) {
                 hex = '0' + hex;
@@ -21,6 +23,8 @@ public class TestUtil {
             sb.append(hex).append(" ");
             if ((i + 1) % 16 == 0) {
                 sb.append("\n");
+                String lineNumStr = String.format("%03d  ", ++lineNum);
+                sb.append(lineNumStr);
             }
         }
         System.out.print(sb);

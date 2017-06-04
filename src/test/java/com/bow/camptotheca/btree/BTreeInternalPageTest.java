@@ -9,7 +9,6 @@ import com.bow.camptotheca.BufferPool;
 import com.bow.camptotheca.Database;
 import com.bow.camptotheca.DbException;
 import com.bow.camptotheca.IntField;
-import com.bow.camptotheca.SimpleDbTestBase;
 import com.bow.camptotheca.SystemTestUtil;
 import com.bow.camptotheca.TestUtil;
 import com.bow.camptotheca.TransactionId;
@@ -20,58 +19,56 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 
 import static org.junit.Assert.*;
 
-//import java.io.File;
 
-public class BTreeInternalPageTest extends SimpleDbTestBase {
+public class BTreeInternalPageTest {
 
-    
+
     private BTreePageId pid;
 
     // these entries have been carefully chosen to be valid entries when
     // inserted in order. Be careful if you change them!
     public static final int[][] EXAMPLE_VALUES = new int[][] {
-    	{ 2, 6350, 4 },
-		{ 4, 9086, 5 },
-		{ 5, 17197, 7 },
-		{ 7, 22064, 9 },
-		{ 9, 22189, 10 },
-		{ 10, 28617, 11 },
-		{ 11, 31933, 13 },
-		{ 13, 33549, 14 },
-		{ 14, 34784, 15 },
-		{ 15, 42878, 17 },
-		{ 17, 45569, 19 },
-		{ 19, 56462, 20 },
-		{ 20, 62778, 21 },
-		{ 15, 42812, 16 },
-		{ 2, 3596, 3 },
-		{ 6, 17876, 7 },
-		{ 1, 1468, 2 },
-		{ 11, 29402, 12 },
-		{ 18, 51440, 19 },
-		{ 7, 19209, 8 } };
+            { 2, 6350, 4 },
+            { 4, 9086, 5 },
+            { 5, 17197, 7 },
+            { 7, 22064, 9 },
+            { 9, 22189, 10 },
+            { 10, 28617, 11 },
+            { 11, 31933, 13 },
+            { 13, 33549, 14 },
+            { 14, 34784, 15 },
+            { 15, 42878, 17 },
+            { 17, 45569, 19 },
+            { 19, 56462, 20 },
+            { 20, 62778, 21 },
+            { 15, 42812, 16 },
+            { 2, 3596, 3 },
+            { 6, 17876, 7 },
+            { 1, 1468, 2 },
+            { 11, 29402, 12 },
+            { 18, 51440, 19 },
+            { 7, 19209, 8 } };
 
-    public static final byte[] EXAMPLE_DATA;
+    public static final byte[] PAGE_DATA;
 
     static {
         // Build the input table
-        ArrayList<BTreeEntry> entries = new ArrayList<BTreeEntry>();
-        for (int[] entry : EXAMPLE_VALUES) {
-            BTreePageId leftChild = new BTreePageId(-1, entry[0], BTreePageId.LEAF);
-            BTreePageId rightChild = new BTreePageId(-1, entry[2], BTreePageId.LEAF);
-            BTreeEntry e = new BTreeEntry(new IntField(entry[1]), leftChild, rightChild);
-            entries.add(e);
+        ArrayList<BTreeEntry> entryList = new ArrayList<BTreeEntry>();
+        for (int[] value : EXAMPLE_VALUES) {
+            BTreePageId leftChild = new BTreePageId(-1, value[0], BTreePageId.LEAF);
+            BTreePageId rightChild = new BTreePageId(-1, value[2], BTreePageId.LEAF);
+            BTreeEntry entry = new BTreeEntry(new IntField(value[1]), leftChild, rightChild);
+            entryList.add(entry);
         }
 
         // Convert it to a BTreeInternalPage
         try {
-            EXAMPLE_DATA = BTreeFileEncoder.convertToInternalPage(entries, BufferPool.getPageSize(), Type.INT_TYPE,
+            PAGE_DATA = BTreeFileEncoder.convertToInternalPage(entryList, BufferPool.getPageSize(), Type.INT_TYPE,
                     BTreePageId.LEAF);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -83,80 +80,39 @@ public class BTreeInternalPageTest extends SimpleDbTestBase {
      */
     @Before
     public void addTable() throws Exception {
+        Database.reset();
         this.pid = new BTreePageId(-1, -1, BTreePageId.INTERNAL);
+        //向数据库注册此page对应的数据库文件的tupleDesc是2个Int型的
         Database.getCatalog().addTable(new TestUtil.SkeletonFile(-1, Utility.getTupleDesc(2)),
                 SystemTestUtil.getUUID());
     }
 
-    /**
-     * Unit test for BTreeInternalPage.getId()
-     */
-    @Test
-    public void getId() throws Exception {
-        BTreeInternalPage page = new BTreeInternalPage(pid, EXAMPLE_DATA, 0);
-        assertEquals(pid, page.getId());
-    }
 
     /**
      * Unit test for BTreeInternalPage.getParentId()
      */
     @Test
-    public void getParentId() throws Exception {
-        BTreeInternalPage page = new BTreeInternalPage(pid, EXAMPLE_DATA, 0);
+    public void parentId() throws Exception {
+        BTreeInternalPage page = new BTreeInternalPage(pid, PAGE_DATA, 0);
         assertEquals(new BTreePageId(pid.getTableId(), 0, BTreePageId.ROOT_PTR), page.getParentId());
-    }
-
-    /**
-     * Unit test for BTreeInternalPage.getParentId()
-     */
-    @Test
-    public void setParentId() throws Exception {
-        BTreeInternalPage page = new BTreeInternalPage(pid, EXAMPLE_DATA, 0);
+        // internal Page 的父节点不能是BTreePageId.LEAF，并且父节点的tableId也应该与子节点保持一致
         BTreePageId id = new BTreePageId(pid.getTableId(), 1, BTreePageId.INTERNAL);
         page.setParentId(id);
         assertEquals(id, page.getParentId());
-
-        id = new BTreePageId(pid.getTableId(), 1, BTreePageId.LEAF);
-        try {
-            page.setParentId(id);
-            throw new Exception("should not be able to set parentId to leaf node; expected DbException");
-        } catch (DbException e) {
-            // explicitly ignored
-        }
-
-        id = new BTreePageId(pid.getTableId() + 1, 1, BTreePageId.INTERNAL);
-        try {
-            page.setParentId(id);
-            throw new Exception(
-                    "should not be able to set parentId to a page from a different table; expected DbException");
-        } catch (DbException e) {
-            // explicitly ignored
-        }
     }
+
 
     /**
      * Unit test for BTreeInternalPage.iterator()
      */
     @Test
     public void testIterator() throws Exception {
-        BTreeInternalPage page = new BTreeInternalPage(pid, EXAMPLE_DATA, 0);
+        BTreeInternalPage page = new BTreeInternalPage(pid, PAGE_DATA, 0);
         Iterator<BTreeEntry> it = page.iterator();
 
-        ArrayList<BTreeEntry> entries = new ArrayList<BTreeEntry>();
-        for (int[] entry : EXAMPLE_VALUES) {
-            BTreePageId leftChild = new BTreePageId(-1, entry[0], BTreePageId.LEAF);
-            BTreePageId rightChild = new BTreePageId(-1, entry[2], BTreePageId.LEAF);
-            BTreeEntry e = new BTreeEntry(new IntField(entry[1]), leftChild, rightChild);
-            entries.add(e);
-        }
-        Collections.sort(entries, new BTreeFileEncoder.EntryComparator());
-
-        int row = 0;
         while (it.hasNext()) {
             BTreeEntry e = it.next();
-
-            assertEquals(entries.get(row).getKey(), e.getKey());
-            row++;
+            System.out.println(e);
         }
     }
 
@@ -165,24 +121,12 @@ public class BTreeInternalPageTest extends SimpleDbTestBase {
      */
     @Test
     public void testReverseIterator() throws Exception {
-        BTreeInternalPage page = new BTreeInternalPage(pid, EXAMPLE_DATA, 0);
+        BTreeInternalPage page = new BTreeInternalPage(pid, PAGE_DATA, 0);
         Iterator<BTreeEntry> it = page.reverseIterator();
 
-        ArrayList<BTreeEntry> entries = new ArrayList<BTreeEntry>();
-        for (int[] entry : EXAMPLE_VALUES) {
-            BTreePageId leftChild = new BTreePageId(-1, entry[0], BTreePageId.LEAF);
-            BTreePageId rightChild = new BTreePageId(-1, entry[2], BTreePageId.LEAF);
-            BTreeEntry e = new BTreeEntry(new IntField(entry[1]), leftChild, rightChild);
-            entries.add(e);
-        }
-        Collections.sort(entries, new BTreeFileEncoder.ReverseEntryComparator());
-
-        int row = 0;
         while (it.hasNext()) {
             BTreeEntry e = it.next();
-
-            assertEquals(entries.get(row).getKey(), e.getKey());
-            row++;
+            System.out.println(e.getKey());
         }
     }
 
@@ -191,7 +135,7 @@ public class BTreeInternalPageTest extends SimpleDbTestBase {
      */
     @Test
     public void getNumEmptySlots() throws Exception {
-        BTreeInternalPage page = new BTreeInternalPage(pid, EXAMPLE_DATA, 0);
+        BTreeInternalPage page = new BTreeInternalPage(pid, PAGE_DATA, 0);
         assertEquals(483, page.getNumEmptySlots());
     }
 
@@ -200,7 +144,7 @@ public class BTreeInternalPageTest extends SimpleDbTestBase {
      */
     @Test
     public void getSlot() throws Exception {
-        BTreeInternalPage page = new BTreeInternalPage(pid, EXAMPLE_DATA, 0);
+        BTreeInternalPage page = new BTreeInternalPage(pid, PAGE_DATA, 0);
 
         // assuming the first slot is used for the extra child pointer
         for (int i = 0; i < 21; ++i)
@@ -216,7 +160,7 @@ public class BTreeInternalPageTest extends SimpleDbTestBase {
     @Test
     public void testDirty() throws Exception {
         TransactionId tid = new TransactionId();
-        BTreeInternalPage page = new BTreeInternalPage(pid, EXAMPLE_DATA, 0);
+        BTreeInternalPage page = new BTreeInternalPage(pid, PAGE_DATA, 0);
         page.markDirty(true, tid);
         TransactionId dirtier = page.isDirty();
         assertEquals(true, dirtier != null);
@@ -235,66 +179,25 @@ public class BTreeInternalPageTest extends SimpleDbTestBase {
         // create a blank page
         byte[] data = BTreeInternalPage.createEmptyPageData();
         BTreeInternalPage page = new BTreeInternalPage(pid, data, 0);
+        // 除了每一个bit代表一个entry状态外，还有一个bit代表多出的那个索引的状态
+        int entryNum = page.getMaxEntries();
+        int headerBit = entryNum + 1;
+        int headerByte = headerBit % 8 == 0 ? headerBit / 8 : headerBit / 8 + 1;
+        System.out.println("header size(Byte) " + headerByte + " entry Num " + entryNum); // 63
+        // 503
 
         // insert entries into the page
-        ArrayList<BTreeEntry> entries = new ArrayList<BTreeEntry>();
-        for (int[] entry : EXAMPLE_VALUES) {
+        int[][] values = { { 1, 0xAA, 2 }, { 2, 0xAB, 3 }, { 3, 0xAC, 4 } };
+        for (int[] entry : values) {
             BTreePageId leftChild = new BTreePageId(pid.getTableId(), entry[0], BTreePageId.LEAF);
             BTreePageId rightChild = new BTreePageId(pid.getTableId(), entry[2], BTreePageId.LEAF);
             BTreeEntry e = new BTreeEntry(new IntField(entry[1]), leftChild, rightChild);
-            entries.add(e);
             page.insertEntry(e);
         }
 
-        // check that the entries are ordered by the key and
-        // all child pointers are present
-        Collections.sort(entries, new BTreeFileEncoder.EntryComparator());
-        Iterator<BTreeEntry> it0 = page.iterator();
-        int childPtr = 1;
-        for (BTreeEntry e : entries) {
-            BTreeEntry next = it0.next();
-            assertTrue(e.getKey().equals(next.getKey()));
-            assertTrue(next.getLeftChild().pageNumber() == childPtr);
-            assertTrue(next.getRightChild().pageNumber() == ++childPtr);
-        }
-
-        // now insert entries until the page fills up
-        int free = page.getNumEmptySlots();
-
-        // NOTE(ghuo): this nested loop existence check is slow, but it
-        // shouldn't make a difference for n = 503 slots.
-
-        for (int i = 0; i < free; ++i) {
-            BTreeEntry addition = BTreeUtility.getBTreeEntry(i + 21, 70000 + i, pid.getTableId());
-            page.insertEntry(addition);
-            assertEquals(free - i - 1, page.getNumEmptySlots());
-
-            // loop through the iterator to ensure that the entry actually
-            // exists
-            // on the page
-            Iterator<BTreeEntry> it = page.iterator();
-            boolean found = false;
-            while (it.hasNext()) {
-                BTreeEntry e = it.next();
-                if (e.getKey().equals(addition.getKey()) && e.getLeftChild().equals(addition.getLeftChild())
-                        && e.getRightChild().equals(addition.getRightChild())) {
-                    found = true;
-
-                    // verify that the RecordId is sane
-                    assertTrue(page.getId().equals(e.getRecordId().getPageId()));
-                    break;
-                }
-            }
-            assertTrue(found);
-        }
-
-        // now, the page should be full.
-        try {
-            page.insertEntry(BTreeUtility.getBTreeEntry(0, 5, pid.getTableId()));
-            throw new Exception("page should be full; expected DbException");
-        } catch (DbException e) {
-            // explicitly ignored
-        }
+        TestUtil.printHex(page.getPageData());
+        // 从上面可以看出序列化后依次为4个字节的父指针，1个字节的子节点类型，63字节的header, 503*4字节的keyField,
+        // 504*4字节的子节点指针。
     }
 
     /**
@@ -302,7 +205,7 @@ public class BTreeInternalPageTest extends SimpleDbTestBase {
      */
     @Test(expected = DbException.class)
     public void deleteNonexistentEntry() throws Exception {
-        BTreeInternalPage page = new BTreeInternalPage(pid, EXAMPLE_DATA, 0);
+        BTreeInternalPage page = new BTreeInternalPage(pid, PAGE_DATA, 0);
         page.deleteKeyAndRightChild(BTreeUtility.getBTreeEntry(2));
     }
 
@@ -311,7 +214,7 @@ public class BTreeInternalPageTest extends SimpleDbTestBase {
      */
     @Test
     public void deleteEntry() throws Exception {
-        BTreeInternalPage page = new BTreeInternalPage(pid, EXAMPLE_DATA, 0);
+        BTreeInternalPage page = new BTreeInternalPage(pid, PAGE_DATA, 0);
         int free = page.getNumEmptySlots();
 
         // first, build a list of the entries on the page.

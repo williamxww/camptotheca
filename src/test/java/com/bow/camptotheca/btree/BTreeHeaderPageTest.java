@@ -75,7 +75,7 @@ public class BTreeHeaderPageTest {
         BTreeHeaderPage page = new BTreeHeaderPage(pid, EXAMPLE_DATA);
         page.init();//最开始的2个int为0后面其他bit全为1
 
-        //下面3句执行后，指针后的第一个byte变为fc  c: 1100
+        //下面几句执行后，指针后的第一个byte变为fc  c: 1100
         page.markSlotUsed(0,false);//将第一个slot改为0，即没有被占用
         page.markSlotUsed(1,false);
         page.markSlotUsed(2,true);
