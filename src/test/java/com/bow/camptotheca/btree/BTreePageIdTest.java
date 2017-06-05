@@ -1,6 +1,6 @@
 package com.bow.camptotheca.btree;
 
-import com.bow.camptotheca.BTreePageId;
+import com.bow.camptotheca.db.BTreePageId;
 import org.junit.Before;
 import org.junit.Test;
 

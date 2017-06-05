@@ -1,9 +1,9 @@
 package com.bow.camptotheca.btree;
 
-import com.bow.camptotheca.BTreeHeaderPage;
-import com.bow.camptotheca.BTreePageId;
-import com.bow.camptotheca.TestUtil;
-import com.bow.camptotheca.TransactionId;
+import com.bow.camptotheca.db.BTreeHeaderPage;
+import com.bow.camptotheca.db.BTreePageId;
+import com.bow.camptotheca.db.TestUtil;
+import com.bow.camptotheca.db.TransactionId;
 import org.junit.Before;
 import org.junit.Test;
 

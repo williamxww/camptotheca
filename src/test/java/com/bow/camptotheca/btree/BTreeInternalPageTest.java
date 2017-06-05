@@ -1,19 +1,19 @@
 package com.bow.camptotheca.btree;
 
-import com.bow.camptotheca.BTreeEntry;
-import com.bow.camptotheca.BTreeFileEncoder;
-import com.bow.camptotheca.BTreeInternalPage;
-import com.bow.camptotheca.BTreePageId;
-import com.bow.camptotheca.BTreeUtility;
-import com.bow.camptotheca.BufferPool;
-import com.bow.camptotheca.Database;
-import com.bow.camptotheca.DbException;
-import com.bow.camptotheca.IntField;
-import com.bow.camptotheca.SystemTestUtil;
-import com.bow.camptotheca.TestUtil;
-import com.bow.camptotheca.TransactionId;
-import com.bow.camptotheca.Type;
-import com.bow.camptotheca.Utility;
+import com.bow.camptotheca.db.BTreeEntry;
+import com.bow.camptotheca.db.BTreeFileEncoder;
+import com.bow.camptotheca.db.BTreeInternalPage;
+import com.bow.camptotheca.db.BTreePageId;
+import com.bow.camptotheca.db.BTreeUtility;
+import com.bow.camptotheca.db.BufferPool;
+import com.bow.camptotheca.db.Database;
+import com.bow.camptotheca.db.DbException;
+import com.bow.camptotheca.db.IntField;
+import com.bow.camptotheca.db.SystemTestUtil;
+import com.bow.camptotheca.db.TestUtil;
+import com.bow.camptotheca.db.TransactionId;
+import com.bow.camptotheca.db.Type;
+import com.bow.camptotheca.db.Utility;
 import org.junit.Before;
 import org.junit.Test;
 
