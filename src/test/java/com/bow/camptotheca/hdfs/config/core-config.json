@@ -1,0 +1,25 @@
+{
+  "data_nodes":
+  [
+    { "host": "localhost",
+      "rpc_port": 9124,
+      "input_port": 9125,
+      "output_port": 9126,
+      "root_dir": "D:/tmp"
+    }
+  ],
+  "name_node":
+  {
+    "host": "localhost",
+    "port": 9123
+  },
+  "data_node":{
+    "host": "localhost",
+    "rpc_port": 9124,
+    "input_port": 9125,
+    "output_port": 9126,
+    "root_dir": "D:/tmp"
+  },
+  "block_size":4,
+  "file_backup": 3
+}
