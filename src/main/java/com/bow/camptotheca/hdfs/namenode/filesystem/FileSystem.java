@@ -1,7 +1,6 @@
 package com.bow.camptotheca.hdfs.namenode.filesystem;
 
 
-import com.bow.camptotheca.hdfs.config.InnerConfig;
 
 public class FileSystem {
     private INode rootDir;
@@ -37,7 +36,7 @@ public class FileSystem {
             hasFindCurFile = false;
             for(INode node : ((INodeDirectory)curNode).getChildNodes()){
                 if(node.getFilename().equals(filepaths[i]) &&
-                        node.getFileType()== InnerConfig.FILE_TYPE_DIR){
+                        node.getFileType()== INode.FILE_TYPE_DIR){
                     curNode = node;
                     hasFindCurFile = true;
                     break;
@@ -68,7 +67,7 @@ public class FileSystem {
         INodeDirectory parentDir = (INodeDirectory) getINodeFromFilePath(filenames, filenames.length - 1);
         for (INode node : parentDir.getChildNodes()) {
             if (node.getFilename().equals(filenames[filenames.length - 1]) &&
-                    node.getFileType() == InnerConfig.FILE_TYPE_FILE) {
+                    node.getFileType() == INode.FILE_TYPE_FILE) {
                 return node;
             }
         }

@@ -1,7 +1,8 @@
 package com.bow.camptotheca.hdfs.datanode;
 
 import org.apache.hadoop.ipc.ProtocolSignature;
-import java.io.*;
+
+import java.io.IOException;
 
 public class DataNodeProtocolImpl implements DataNodeProtocol {
 

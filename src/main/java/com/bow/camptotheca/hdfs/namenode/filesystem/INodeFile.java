@@ -1,6 +1,5 @@
 package com.bow.camptotheca.hdfs.namenode.filesystem;
 
-import com.bow.camptotheca.hdfs.config.InnerConfig;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,7 +9,7 @@ public class INodeFile extends INode {
 
     public INodeFile() {
         super();
-        this.fileType = InnerConfig.FILE_TYPE_FILE;
+        this.fileType = INode.FILE_TYPE_FILE;
     }
 
     public INodeFile(String filename) {

@@ -3,6 +3,16 @@ package com.bow.camptotheca.hdfs.namenode.filesystem;
 import java.util.Date;
 
 public class INode {
+
+    /**
+     * directory
+     */
+    public static final int FILE_TYPE_DIR = 1;
+    /**
+     * file
+     */
+    public static final int FILE_TYPE_FILE = 2;
+
     protected int fileType;
 
     protected String filename;
